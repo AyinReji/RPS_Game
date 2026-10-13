@@ -29,27 +29,30 @@ export class HandTracker {
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
       );
 
+      const landmarkerOptions = {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+          delegate: "GPU" as const,
+        },
+        runningMode: "VIDEO" as const,
+        numHands: 2,
+        minHandDetectionConfidence: 0.5,
+        minHandPresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      };
+
       try {
         // Try with GPU delegate first
-        this.handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-            delegate: "GPU",
-          },
-          runningMode: "VIDEO",
-          numHands: 1,
-        });
+        this.handLandmarker = await HandLandmarker.createFromOptions(fileset, landmarkerOptions);
       } catch {
         // Fallback to CPU delegate if GPU initialization fails
         this.handLandmarker = await HandLandmarker.createFromOptions(fileset, {
+          ...landmarkerOptions,
           baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            ...landmarkerOptions.baseOptions,
             delegate: "CPU",
           },
-          runningMode: "VIDEO",
-          numHands: 1,
         });
       }
 
@@ -101,8 +104,27 @@ export class HandTracker {
 
       const handCount = results.landmarks.length;
 
-      // Primary hand landmarks (largest or first)
-      const primaryLandmarks: Landmark[] = results.landmarks[0].map(
+      // Select primary hand (largest bounding box / closest to camera)
+      let primaryHandIndex = 0;
+      if (handCount > 1) {
+        let maxArea = -1;
+        results.landmarks.forEach((hand: Array<{ x: number; y: number }>, idx: number) => {
+          let minX = 1, maxX = 0, minY = 1, maxY = 0;
+          hand.forEach((lm) => {
+            if (lm.x < minX) minX = lm.x;
+            if (lm.x > maxX) maxX = lm.x;
+            if (lm.y < minY) minY = lm.y;
+            if (lm.y > maxY) maxY = lm.y;
+          });
+          const area = (maxX - minX) * (maxY - minY);
+          if (area > maxArea) {
+            maxArea = area;
+            primaryHandIndex = idx;
+          }
+        });
+      }
+
+      const primaryLandmarks: Landmark[] = results.landmarks[primaryHandIndex].map(
         (lm: { x: number; y: number; z: number }) => ({
           x: lm.x,
           y: lm.y,

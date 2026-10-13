@@ -77,17 +77,26 @@ export function useCamera(): UseCameraReturn {
           stream.getTracks().forEach((track) => track.stop());
         }
 
-        const constraints: MediaStreamConstraints = {
-          video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: "user",
-            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-          },
-          audio: false,
-        };
+        let newStream: MediaStream;
+        try {
+          const constraints: MediaStreamConstraints = {
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: "user",
+              ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+            },
+            audio: false,
+          };
+          newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (constraintErr) {
+          console.warn("[useCamera] Ideal constraints failed, falling back to basic video constraints:", constraintErr);
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: deviceId ? { deviceId } : true,
+            audio: false,
+          });
+        }
 
-        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
         setStream(newStream);
 
         if (videoRef.current) {

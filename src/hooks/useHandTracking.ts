@@ -115,7 +115,7 @@ export function useHandTracking({
 
     const video = videoRef.current;
     if (video) {
-      // Try MediaPipe first if it's ready
+      // Use MediaPipe when ready
       if (mediaPipeReady.current === true) {
         try {
           const result = handTracker.detect(video, now);
@@ -123,25 +123,23 @@ export function useHandTracking({
             detectionCount.current++;
             setDetection(result);
           } else {
-            // MediaPipe didn't find a hand — try OpenCV as secondary
-            const cvResult = openCvTracker.detect(video);
-            if (cvResult.handCount > 0) {
-              detectionCount.current++;
-              setDetection(cvResult);
-            } else {
-              setDetection(DEFAULT_DETECTION);
-            }
+            // No hand detected by MediaPipe — clean empty state
+            setDetection(DEFAULT_DETECTION);
           }
         } catch (err) {
           console.warn("[HandTracking] MediaPipe runtime error, falling back to OpenCV:", err);
           mediaPipeReady.current = false;
         }
-      } else {
-        // OpenCV-only fallback
+      } else if (mediaPipeReady.current === false) {
+        // OpenCV-only fallback if MediaPipe failed to initialize or crashed
         try {
           const cvResult = openCvTracker.detect(video);
-          detectionCount.current++;
-          setDetection(cvResult);
+          if (cvResult.handCount > 0) {
+            detectionCount.current++;
+            setDetection(cvResult);
+          } else {
+            setDetection(DEFAULT_DETECTION);
+          }
         } catch {
           setDetection(DEFAULT_DETECTION);
         }

@@ -19,8 +19,14 @@ export function classifyGesture(landmarks: Landmark[]): ClassificationResult {
     return { gesture: "unknown", confidence: 0 };
   }
 
-  const { indexExtended, middleExtended, ringExtended, pinkyExtended, extendedCount } =
-    getFingerStates(landmarks);
+  const {
+    thumbExtended,
+    indexExtended,
+    middleExtended,
+    ringExtended,
+    pinkyExtended,
+    extendedCount,
+  } = getFingerStates(landmarks);
 
   // ── SCISSORS ─────────────────────────────────────────────────────────
   // Only index + middle are up; ring & pinky must be down.
@@ -29,23 +35,23 @@ export function classifyGesture(landmarks: Landmark[]): ClassificationResult {
   }
 
   // ── PAPER ────────────────────────────────────────────────────────────
-  // Three or more fingers extended → open hand.
-  if (extendedCount >= 3) {
-    return { gesture: "paper", confidence: extendedCount >= 4 ? 0.95 : 0.85 };
+  // All 4 fingers up, or 3 fingers + thumb open.
+  if (extendedCount >= 4) {
+    return { gesture: "paper", confidence: 0.98 };
+  }
+  if (extendedCount === 3 && thumbExtended) {
+    return { gesture: "paper", confidence: 0.92 };
+  }
+  if (extendedCount === 3) {
+    return { gesture: "paper", confidence: 0.85 };
   }
 
   // ── ROCK ─────────────────────────────────────────────────────────────
-  // Zero fingers extended → closed fist.
+  // Zero non-thumb fingers extended → closed fist.
   if (extendedCount === 0) {
-    return { gesture: "rock", confidence: 0.95 };
+    return { gesture: "rock", confidence: 0.96 };
   }
 
-  // One finger extended (not a clear gesture) – lean toward rock since
-  // the user expects a fist to always be rock, and one-finger wobble is common.
-  if (extendedCount === 1) {
-    return { gesture: "rock", confidence: 0.75 };
-  }
-
-  // Two fingers but NOT the index+middle combo → ambiguous
-  return { gesture: "unknown", confidence: 0.3 };
+  // Ambiguous gestures (single finger pointing, thumbs up, etc.)
+  return { gesture: "unknown", confidence: 0.2 };
 }

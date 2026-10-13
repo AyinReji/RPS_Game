@@ -8,6 +8,7 @@ import { Camera, Square } from "lucide-react";
 
 export interface WebcamViewProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  stream?: MediaStream | null;
   isCameraActive: boolean;
   isLoading: boolean;
   error: string | null;
@@ -26,6 +27,7 @@ const GESTURE_LABELS: Record<Gesture, { emoji: string; label: string; color: str
 
 export const WebcamView: React.FC<WebcamViewProps> = ({
   videoRef,
+  stream,
   isCameraActive,
   isLoading,
   error,
@@ -36,11 +38,34 @@ export const WebcamView: React.FC<WebcamViewProps> = ({
 }) => {
   const currentInfo = GESTURE_LABELS[detection.gesture] || GESTURE_LABELS.unknown;
 
+  // Ensure video element plays as soon as stream or ref mounts
+  React.useEffect(() => {
+    if (videoRef.current && stream && videoRef.current.srcObject !== stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch((err) => {
+        if (err.name !== "AbortError") {
+          console.warn("Error playing video:", err);
+        }
+      });
+    }
+  }, [stream, videoRef]);
+
   return (
     <div className="relative w-full aspect-[4/3] sm:aspect-video rounded-2xl overflow-hidden bg-slate-900 border border-slate-200 shadow-xl flex flex-col justify-center items-center group">
       {/* Video Feed */}
       <video
-        ref={videoRef}
+        ref={(el) => {
+          if (videoRef) {
+            (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
+          }
+          if (el && stream && el.srcObject !== stream) {
+            el.srcObject = stream;
+            el.play().catch(() => {});
+          }
+        }}
+        onLoadedMetadata={(e) => {
+          e.currentTarget.play().catch(() => {});
+        }}
         autoPlay
         playsInline
         muted

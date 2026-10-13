@@ -33,6 +33,7 @@ export const GameBoard: React.FC = () => {
 
   const {
     videoRef,
+    stream,
     isCameraActive,
     isLoading: isCameraLoading,
     error: cameraError,
@@ -57,16 +58,26 @@ export const GameBoard: React.FC = () => {
   const [isDebugMode, setIsDebugMode] = useState<boolean>(false);
   const lastDetectedMoveRef = useRef<Move | null>(null);
 
-  // Continuously record valid gesture to ensure zero input drops
+  // Record valid gesture during countdown final phase and capture moment
   useEffect(() => {
     if (
-      detection.gesture === "rock" ||
-      detection.gesture === "paper" ||
-      detection.gesture === "scissors"
+      state.status === "CAPTURE" ||
+      (state.status === "COUNTDOWN" && state.currentCountdown <= 1)
     ) {
-      lastDetectedMoveRef.current = detection.gesture;
+      if (
+        detection.gesture === "rock" ||
+        detection.gesture === "paper" ||
+        detection.gesture === "scissors"
+      ) {
+        lastDetectedMoveRef.current = detection.gesture;
+      }
+    } else if (
+      state.status === "GET_READY" ||
+      (state.status === "COUNTDOWN" && state.currentCountdown > 1)
+    ) {
+      lastDetectedMoveRef.current = null;
     }
-  }, [detection.gesture]);
+  }, [detection.gesture, state.status, state.currentCountdown]);
 
   // Check URL query parameters for ?debug=true
   useEffect(() => {
@@ -93,13 +104,11 @@ export const GameBoard: React.FC = () => {
     useFallbackControls();
   };
 
-  // Capture moment gesture locking
-  // Gives a 500ms sampling window during CAPTURE to let detection stabilize
+  // Capture moment gesture locking: gives 400ms sampling window during CAPTURE
   useEffect(() => {
     if (state.status === "GET_READY") {
       lastDetectedMoveRef.current = null;
     } else if (state.status === "CAPTURE") {
-      // Check the current gesture immediately
       const currentGesture = detection.gesture;
       if (
         currentGesture === "rock" ||
@@ -109,7 +118,6 @@ export const GameBoard: React.FC = () => {
         lastDetectedMoveRef.current = currentGesture;
       }
 
-      // Wait a short window for detection to stabilize, then commit
       const captureTimer = setTimeout(() => {
         const finalGesture = lastDetectedMoveRef.current;
         console.log(
@@ -118,7 +126,6 @@ export const GameBoard: React.FC = () => {
         if (finalGesture) {
           makePlayerMove(finalGesture);
         } else {
-          // No gesture detected at all — use whatever is live
           const live = detection.gesture;
           if (live === "rock" || live === "paper" || live === "scissors") {
             makePlayerMove(live);
@@ -251,6 +258,7 @@ export const GameBoard: React.FC = () => {
               <div className="relative w-full">
                 <WebcamView
                   videoRef={videoRef}
+                  stream={stream}
                   isCameraActive={isCameraActive}
                   isLoading={isCameraLoading || isModelLoading}
                   error={cameraError}

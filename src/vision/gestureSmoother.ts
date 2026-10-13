@@ -5,16 +5,15 @@ export class GestureSmoother {
   private buffer: ClassificationResult[] = [];
   private readonly maxWindowSize: number;
   private readonly confidenceThreshold: number;
-  private readonly stabilityRatio: number;
+  private currentStableGesture: Gesture = "unknown";
 
   constructor(
-    windowSize: number = 3,
+    windowSize: number = 5,
     confidenceThreshold: number = 0.5,
-    stabilityRatio: number = 0.33
+    _stabilityRatio: number = 0.33
   ) {
     this.maxWindowSize = windowSize;
     this.confidenceThreshold = confidenceThreshold;
-    this.stabilityRatio = stabilityRatio;
   }
 
   public addDetection(detection: ClassificationResult): Gesture {
@@ -29,12 +28,6 @@ export class GestureSmoother {
   public getStableGesture(): Gesture {
     if (this.buffer.length === 0) return "unknown";
 
-    // Latest detection is prioritized for instant gameplay response
-    const latest = this.buffer[this.buffer.length - 1];
-    if (latest && latest.confidence >= this.confidenceThreshold && latest.gesture !== "unknown") {
-      return latest.gesture;
-    }
-
     const counts: Record<Gesture, number> = {
       rock: 0,
       paper: 0,
@@ -42,28 +35,53 @@ export class GestureSmoother {
       unknown: 0,
     };
 
-    let validCount = 0;
-    for (const item of this.buffer) {
+    const weightedScores: Record<Gesture, number> = {
+      rock: 0,
+      paper: 0,
+      scissors: 0,
+      unknown: 0,
+    };
+
+    this.buffer.forEach((item, index) => {
+      // Recent frames get progressively higher weight (1.0 up to 2.0)
+      const recencyWeight = 1 + index / this.buffer.length;
       if (item.confidence >= this.confidenceThreshold) {
         counts[item.gesture]++;
-        validCount++;
+        weightedScores[item.gesture] += recencyWeight * item.confidence;
       } else {
         counts["unknown"]++;
+        weightedScores["unknown"] += recencyWeight * 0.5;
+      }
+    });
+
+    // Find the gesture with the highest weighted score
+    let bestGesture: Gesture = "unknown";
+    let maxScore = 0;
+
+    for (const g of ["rock", "paper", "scissors"] as Gesture[]) {
+      if (weightedScores[g] > maxScore) {
+        maxScore = weightedScores[g];
+        bestGesture = g;
       }
     }
 
-    if (validCount === 0) return "unknown";
-
-    for (const gesture of ["rock", "paper", "scissors"] as Gesture[]) {
-      if (counts[gesture] >= 1) {
-        return gesture;
-      }
+    // Require at least 2 consistent frames in buffer to switch to a move
+    if (bestGesture !== "unknown" && counts[bestGesture] >= 2) {
+      this.currentStableGesture = bestGesture;
+      return bestGesture;
     }
 
-    return "unknown";
+    // If buffer is predominantly unknown (e.g. hand moved away from frame)
+    if (counts.unknown >= Math.ceil(this.buffer.length * 0.6)) {
+      this.currentStableGesture = "unknown";
+      return "unknown";
+    }
+
+    return this.currentStableGesture;
   }
 
   public reset(): void {
     this.buffer = [];
+    this.currentStableGesture = "unknown";
   }
 }

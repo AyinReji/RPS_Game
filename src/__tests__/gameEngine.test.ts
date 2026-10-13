@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { resolveRound } from "../game/scoring";
 import { gameReducer, initialGameState } from "../game/gameState";
 import { Move, RoundResult } from "../types/game";
+import { GestureSmoother } from "../vision/gestureSmoother";
 
 describe("Rock Paper Scissors Game Engine", () => {
   describe("resolveRound - All 9 combinations", () => {
@@ -72,6 +73,29 @@ describe("Rock Paper Scissors Game Engine", () => {
       expect(nextState.stats.wins).toBe(1);
       expect(nextState.stats.currentStreak).toBe(1);
       expect(nextState.stats.xp).toBe(100);
+    });
+  });
+
+  describe("GestureSmoother", () => {
+    it("returns unknown for empty buffer", () => {
+      const smoother = new GestureSmoother(5);
+      expect(smoother.getStableGesture()).toBe("unknown");
+    });
+
+    it("requires at least 2 consistent frames to establish gesture and ignores single noisy frames", () => {
+      const smoother = new GestureSmoother(5);
+
+      // Single frame does not immediately lock in
+      expect(smoother.addDetection({ gesture: "scissors", confidence: 0.95 })).toBe("unknown");
+
+      // Second frame locks in scissors
+      expect(smoother.addDetection({ gesture: "scissors", confidence: 0.95 })).toBe("scissors");
+
+      // One noisy frame does not immediately break scissors
+      expect(smoother.addDetection({ gesture: "rock", confidence: 0.8 })).toBe("scissors");
+
+      // Two consecutive rock frames switch to rock cleanly
+      expect(smoother.addDetection({ gesture: "rock", confidence: 0.9 })).toBe("rock");
     });
   });
 });
